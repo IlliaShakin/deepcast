@@ -57,8 +57,19 @@ scanned survey) can upgrade any other lake to "surveyed" — ask.
   (real coordinates, real shapes), and tells you if you're not on this lake.
 - **Structure markers** — drop-offs (D), shallower tops (H), deepest basins (O),
   flats (F), derived from the estimated depth field, each with fishing notes.
+- **🐟 Pike Today** — a hotspot predictor. Reads the season, time of day, solunar
+  windows, moon and **live weather** (Open-Meteo: temperature, pressure trend,
+  wind, cloud), rates the bite 1–5 for right now, lists today's best windows, and
+  marks the most likely pike spots on the map — ranked, each with a reason and a
+  suggested bait. Spots shift with conditions: shallow weed edges in low light,
+  the deeper cooler basin in bright heat. Includes a pike bait encyclopedia (how
+  each lure works and why it suits pike) and today's best-bait picks. Grounded in
+  pike biology (ambush-at-edges, 10–20 °C activity, dawn/dusk peaks, falling
+  pressure). Works for any lake; most accurate on surveyed Babīte. Honours the
+  1 May–15 June closed season.
 - **Species Guide with fish illustrations** — inline-SVG side views of 8 Latvian
-  species, named in **Latvian · English · Russian** (Līdaka · Pike · Щука …).
+  species, named in **Latvian · English · Russian** (Līdaka · Pike · Щука …). The
+  pike entry breaks down every bait type and how it works.
 - **Depth-study seasonal advice** — for the selected lake, each species' seasonal
   behaviour is combined with *this lake's* real max depth and detected structure.
   The same fish gives different advice on a 65 m lake (thermocline, hold ~3–8 m on

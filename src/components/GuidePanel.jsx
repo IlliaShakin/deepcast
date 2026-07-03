@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SPECIES } from '../speciesGuide.js';
 import { seasonalAdvice } from '../advice.js';
+import { PIKE_BAITS } from '../pikeBaits.js';
 import FishIcon from './FishIcon.jsx';
 
 const SEASONS = ['spring', 'summer', 'fall', 'winter'];
@@ -69,6 +70,24 @@ export default function GuidePanel({ lake, structures, onHighlight }) {
                 <p>
                   <b>Lures:</b> {sp.lures}
                 </p>
+                {sp.id === 'pike' && (
+                  <div className="bait-breakdown">
+                    <div className="bait-bd-title">🎣 Pike baits — how each works</div>
+                    {PIKE_BAITS.map((b) => (
+                      <div key={b.id} className="bait-bd-row">
+                        <span className="bait-emoji">{b.emoji}</span>
+                        <div>
+                          <b>{b.en}</b> <span className="muted">· {b.ru}</span>
+                          <div className="bait-bd-how">{b.how}</div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="muted" style={{ marginTop: 6 }}>
+                      The 🐟 Pike tab picks the best of these for right now and marks where to throw
+                      it.
+                    </div>
+                  </div>
+                )}
                 <button className="btn primary" onClick={() => onHighlight(lo, hi)}>
                   ◍ Highlight {lo}–{hi} m on the map
                 </button>

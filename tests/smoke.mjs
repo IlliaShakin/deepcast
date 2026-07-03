@@ -6,6 +6,8 @@ import { detectStructures } from '../src/structures.js';
 import { solunarDay, sunTimes } from '../src/solunar.js';
 import { SPECIES } from '../src/speciesGuide.js';
 import { seasonalAdvice } from '../src/advice.js';
+import { buildConditions, computePikeHotspots, isPikeClosedSeason } from '../src/pike.js';
+import { recommendBaits, PIKE_BAITS } from '../src/pikeBaits.js';
 
 let failures = 0;
 const check = (cond, msg) => {
@@ -110,6 +112,48 @@ console.log('\nSeasonal advice (adapts band to lake depth)');
     }
   }
   check(true, `all ${SPECIES.length} species × 4 seasons produce valid advice`);
+}
+
+console.log('\nPike predictor (Babīte)');
+{
+  const lake = getLake('babite');
+  const structures = detectStructures(lake);
+  const { lat, lon } = lake.cfg;
+  const midnight = new Date(2026, 6, 4); // 4 Jul 2026, open season
+  const sol = solunarDay(midnight, lat, lon);
+
+  // Overcast, cool, falling pressure, at dawn → should be shallow + high activity.
+  const wetDawn = { tempC: 16, pressure: 1004, pressureTrend: -1.5, windSpeed: 15, windDirDeg: 205, cloudPct: 100, isDay: false };
+  const cDawn = buildConditions(sol.sun.sunrise.getTime(), sol, wetDawn, lake.maxDepth);
+  const dawnSpots = computePikeHotspots(lake, structures, cDawn, 6);
+
+  // Bright, hot, high rising pressure, midday → deeper + low activity.
+  const dryNoon = { tempC: 29, pressure: 1025, pressureTrend: 1.6, windSpeed: 3, windDirDeg: 90, cloudPct: 3, isDay: true };
+  const cNoon = buildConditions(midnight.getTime() + 13 * 3600000, sol, dryNoon, lake.maxDepth);
+  const noonSpots = computePikeHotspots(lake, structures, cNoon, 6);
+
+  check(cDawn.activity.score >= 1 && cDawn.activity.score <= 5, `dawn activity ${cDawn.activity.score}/5 (${cDawn.activity.label})`);
+  check(cDawn.activity.score > cNoon.activity.score, `overcast dawn (${cDawn.activity.score}) rates higher than bright hot noon (${cNoon.activity.score})`);
+  check(dawnSpots.length === 6 && noonSpots.length === 6, `both scenarios yield 6 hotspots`);
+  check(dawnSpots.every((s) => depthAt(lake, s.x, s.y) > 0), 'all dawn hotspots are on water');
+  check(dawnSpots.every((s) => s.reason && s.baitId && s.where), 'hotspots carry reason + bait + location');
+  const dawnMean = dawnSpots.reduce((a, s) => a + s.depth, 0) / 6;
+  const noonMean = noonSpots.reduce((a, s) => a + s.depth, 0) / 6;
+  check(noonMean > dawnMean, `bright-noon spots deeper than dawn (${noonMean.toFixed(2)} m vs ${dawnMean.toFixed(2)} m)`);
+  // separation
+  const mpc = lake.cfg.metersPerCell;
+  let minPairM = Infinity;
+  for (let i = 0; i < dawnSpots.length; i++)
+    for (let j = i + 1; j < dawnSpots.length; j++)
+      minPairM = Math.min(minPairM, Math.hypot(dawnSpots[i].x - dawnSpots[j].x, dawnSpots[i].y - dawnSpots[j].y) * mpc);
+  check(minPairM > 150, `hotspots are spatially separated (min ${Math.round(minPairM)} m apart)`);
+  // determinism
+  const again = computePikeHotspots(lake, structures, cDawn, 6);
+  check(again.every((s, i) => s.id === dawnSpots[i].id), 'hotspot output is deterministic');
+  // baits
+  check(recommendBaits(cDawn, 3).length === 3, 'recommends 3 baits for the day');
+  check(PIKE_BAITS.every((b) => b.how && b.retrieve && b.en && b.ru), 'every bait has how/retrieve + trilingual name');
+  check(isPikeClosedSeason(new Date(2026, 4, 20)) && !isPikeClosedSeason(new Date(2026, 6, 4)), 'closed-season 1 May–15 Jun detected');
 }
 
 console.log('\nSolunar (Ķīšezers, Rīga)');

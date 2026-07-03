@@ -1,7 +1,8 @@
 const TABS = [
   { id: 'map', icon: '🗺️', label: 'Map' },
+  { id: 'pike', icon: '🐟', label: 'Pike' },
   { id: 'spots', icon: '📍', label: 'Spots' },
-  { id: 'times', icon: '🌙', label: 'Bite Times' },
+  { id: 'times', icon: '🌙', label: 'Times' },
   { id: 'guide', icon: '🎣', label: 'Guide' },
 ];
 

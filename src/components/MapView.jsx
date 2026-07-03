@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { depthAt, gridFromLatLon, latLonFromGrid } from '../lakes.js';
 import { renderBathymetry, renderHighlight, renderDepthOverlay, depthGradientCSS } from '../render.js';
 import { getTile, lon2tileX, lat2tileY, tileX2lon, tileY2lat, groundResolution } from '../tiles.js';
+import { baitById } from '../pikeBaits.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MINZOOM = 0.8;
@@ -23,6 +24,8 @@ export default function MapView({
   flyTo,
   onAddSpot,
   onDeleteSpot,
+  pikeSpots = [],
+  pikeFocus = 0,
 }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
@@ -40,6 +43,7 @@ export default function MapView({
   const [showSpots, setShowSpots] = useState(true);
   const [gps, setGps] = useState({ on: false, fix: null, error: null });
   const [showMap, setShowMap] = useState(false);
+  const [showPike, setShowPike] = useState(false);
   const geoWatch = useRef(null);
   const gpsCentered = useRef(false);
 
@@ -179,6 +183,29 @@ export default function MapView({
       }
     }
 
+    if (showPike) {
+      for (const s of pikeSpots) {
+        const [sx, sy] = proj(s.x, s.y);
+        if (sx < -20 || sy < -24 || sx > w + 20 || sy > h + 20) continue;
+        const sel = selection?.kind === 'pike' && selection.spot.id === s.id;
+        const color = s.rank <= 2 ? '#f5c542' : '#19c3ae';
+        ctx.font = '13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🐟', sx, sy - 17);
+        ctx.beginPath();
+        ctx.arc(sx, sy, sel ? 14 : 12, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = sel ? '#ffffff' : 'rgba(6,32,38,0.85)';
+        ctx.stroke();
+        ctx.fillStyle = '#04262b';
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.fillText(String(s.rank), sx, sy + 0.5);
+      }
+    }
+
     if (gps.fix) {
       const g = gridFromLatLon(lake, gps.fix.lat, gps.fix.lon);
       const [sx, sy] = proj(g.x, g.y);
@@ -290,6 +317,11 @@ export default function MapView({
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lake]);
+
+  // Arriving from the Pike tab turns the hotspot layer on.
+  useEffect(() => {
+    if (pikeFocus) setShowPike(true);
+  }, [pikeFocus]);
 
   useEffect(() => {
     if (!flyTo || !view.current.ready) return;
@@ -464,6 +496,16 @@ export default function MapView({
     const v = view.current;
     const proj = (wx, wy) => [wx * v.z + v.px, wy * v.z + v.py];
     setSaveName(null);
+    if (showPike) {
+      for (const s of pikeSpots) {
+        const [mx, my] = proj(s.x, s.y);
+        if (Math.hypot(mx - sx, my - sy) < 18) {
+          setSelection({ kind: 'pike', spot: s });
+          setSheetOpen(false);
+          return;
+        }
+      }
+    }
     if (showSpots) {
       for (const s of spots) {
         const [mx, my] = proj(s.x, s.y);
@@ -547,6 +589,11 @@ export default function MapView({
         <button className={'chip' + (showMap ? ' on' : '')} onClick={() => setShowMap((x) => !x)}>
           🗺️ Map
         </button>
+        {pikeSpots.length > 0 && (
+          <button className={'chip' + (showPike ? ' on' : '')} onClick={() => setShowPike((x) => !x)}>
+            🐟 Pike
+          </button>
+        )}
         {gpsStatus && <div className="gps-status">{gpsStatus}</div>}
       </div>
 
@@ -634,6 +681,15 @@ export default function MapView({
                 {lake.cfg.surveyed
                   ? 'From the digitized 1975 depth survey — verify on the water.'
                   : 'Estimated from lake shape and reported depths — verify on the water.'}
+              </p>
+            </>
+          )}
+          {selection.kind === 'pike' && (
+            <>
+              <div className="card-title">🐟 Pike spot #{selection.spot.rank} · ~{selection.spot.depth.toFixed(1)} m</div>
+              <p className="card-note">{selection.spot.reason}</p>
+              <p className="card-note">
+                <b>Try:</b> {baitById(selection.spot.baitId).emoji} {baitById(selection.spot.baitId).en} — {baitById(selection.spot.baitId).action}
               </p>
             </>
           )}
