@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+
+scripts/survey-scans/*.bmp
+scripts/survey-scans/
+scripts/.overpass-cache.json
