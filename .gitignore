@@ -5,3 +5,4 @@ dist
 scripts/survey-scans/*.bmp
 scripts/survey-scans/
 scripts/.overpass-cache.json
+*.zip
