@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PIKE_BAITS, baitById } from '../pikeBaits.js';
-import FishIcon from './FishIcon.jsx';
+import BaitIcon from './BaitIcon.jsx';
 import { compass, pressureWord } from '../weather.js';
 
 const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -107,7 +107,10 @@ export default function PikePanel({ lake, conditions: c, sol, hotspots, weatherL
               <button className="btn small" onClick={() => onGoto(s)}>Map</button>
             </div>
             <div className="pike-reason">{s.reason}</div>
-            <div className="pike-bait">{b.emoji} <b>{b.en}</b> — {b.action}</div>
+            <div className="pike-bait">
+              <BaitIcon id={b.id} size={56} />
+              <span>Try a <b>{b.en}</b> — {b.action}</span>
+            </div>
           </div>
         );
       })}
@@ -117,7 +120,7 @@ export default function PikePanel({ lake, conditions: c, sol, hotspots, weatherL
       {c.baits.map((b, i) => (
         <div key={b.id} className="species-card">
           <div className="bait-pick">
-            <span className="bait-emoji">{b.emoji}</span>
+            <div className="bait-pick-img"><BaitIcon id={b.id} size={80} /></div>
             <div>
               <div className="sp-lv">{i + 1}. {b.en} <span className="muted">· {b.lv} · {b.ru}</span></div>
               <div className="muted">{b.best}</div>
@@ -132,22 +135,22 @@ export default function PikePanel({ lake, conditions: c, sol, hotspots, weatherL
           {openBaits ? '▾' : '▸'} All pike baits & how each works
         </button>
       </h3>
-      {openBaits &&
-        PIKE_BAITS.map((b) => (
-          <div key={b.id} className="species-card">
-            <div className="species-body" style={{ paddingTop: 12 }}>
-              <div className="bait-title">
-                <span className="bait-emoji">{b.emoji}</span>
-                <span className="sp-lv">{b.en}</span>
-                <span className="muted"> · {b.lv} · {b.ru}</span>
+      {openBaits && (
+        <div className="pg-baits">
+          {PIKE_BAITS.map((b) => (
+            <div key={b.id} className="pg-bait">
+              <div className="pg-bait-img"><BaitIcon id={b.id} size={104} /></div>
+              <div className="pg-bait-body">
+                <div className="pg-bait-name">{b.en} <span className="muted">· {b.lv} · {b.ru}</span></div>
+                <div className="pg-bait-action">{b.action}</div>
+                <p className="pg-bait-how">{b.how}</p>
+                <p className="pg-bait-retrieve"><b>Retrieve:</b> {b.retrieve}</p>
+                <p className="muted pg-bait-best">Shines: {b.best}</p>
               </div>
-              <p><b>Action:</b> {b.action}</p>
-              <p><b>How it works:</b> {b.how}</p>
-              <p><b>Retrieve:</b> {b.retrieve}</p>
-              <p className="muted">Shines: {b.best}</p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      )}
 
       <p className="fine-print">
         Predictions blend pike biology (ambush-at-edges, 10–20°C activity, dawn/dusk peaks, falling

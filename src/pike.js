@@ -125,13 +125,14 @@ function quadrantWord(dx, dy) {
 }
 
 // ---- Hotspot predictor ----
-// Returns ranked spots [{x,y,depth,score,reason,baitId,where}].
+// Returns ranked spots [{x,y,depth,score,reason,baitId,where,role}].
+// Pike are edge/ambush fish, so spots sit ON the weed edge / drop-off — but held
+// OFF the bank (a shore buffer) so they land in fishable water, and the set mixes
+// shallow feeding edges with deeper holding lies out toward the basin/holes.
 export function computePikeHotspots(lake, structures, c, maxN = 6) {
-  const { grid, n, maxDepth } = lake;
+  const { grid, n, maxDepth, shoreDist } = lake;
   const mpc = lake.cfg.metersPerCell;
-  const { target, favorShallow } = pikeBands(c, maxDepth);
-  const tmid = (target[0] + target[1]) / 2;
-  const twid = Math.max(0.3, (target[1] - target[0]) / 2);
+  const bands = pikeBands(c, maxDepth);
 
   // slope (m depth per m distance)
   const slope = new Float32Array(n * n);
@@ -166,12 +167,12 @@ export function computePikeHotspots(lake, structures, c, maxN = 6) {
     return false;
   };
 
-  // wind: downwind bank bonus (wind pushes warm surface water + bait there)
+  // wind: downwind side bonus (wind pushes warm surface water + bait there)
   let wdx = 0, wdy = 0;
   if (c.weather && c.weather.windSpeed >= 8) {
     const to = ((c.weather.windDirDeg || 0) + 180) * (Math.PI / 180); // FROM → TO
-    wdx = Math.sin(to); // east component
-    wdy = -Math.cos(to); // grid y is south-positive; north = -cos
+    wdx = Math.sin(to);
+    wdy = -Math.cos(to);
   }
 
   const structAt = structures.map((s) => ({ x: s.x, y: s.y, type: s.type }));
@@ -180,51 +181,75 @@ export function computePikeHotspots(lake, structures, c, maxN = 6) {
     return null;
   };
 
-  const cands = [];
-  const maxUseful = Math.min(maxDepth, target[1] + Math.max(0.5, maxDepth * 0.2));
-  for (let y = 2; y < n - 2; y += 2)
-    for (let x = 2; x < n - 2; x += 2) {
-      const i = y * n + x;
-      const d = grid[i];
-      if (d <= 0.2 || d > maxUseful) continue;
-      const edge = Math.min(1, slope[i] / p95);
-      const depthFit = Math.exp(-((d - tmid) ** 2) / (2 * twid * twid));
-      const cover = hasShallowNear(x, y) ? 1 : 0;
-      const st = nearStruct(x, y);
-      const structBonus = st ? (st.type === 'dropoff' ? 1 : st.type === 'hole' ? 0.7 : 0.6) : 0;
-      let wind = 0;
-      if (wdx || wdy) {
-        const vx = (x - cx), vy = (y - cy);
-        const vl = Math.hypot(vx, vy) || 1;
-        wind = Math.max(0, (vx / vl) * wdx + (vy / vl) * wdy); // 0..1 downwind
+  // keep spots off the immediate bank (in real water on the weed edge)
+  const shoreBufferM = Math.max(45, mpc * 1.5);
+
+  const scoreBand = (band) => {
+    const tmid = (band[0] + band[1]) / 2;
+    const twid = Math.max(0.3, (band[1] - band[0]) / 2);
+    const maxUseful = Math.min(maxDepth, band[1] + Math.max(0.5, maxDepth * 0.25));
+    const out = [];
+    for (let y = 2; y < n - 2; y += 2)
+      for (let x = 2; x < n - 2; x += 2) {
+        const i = y * n + x;
+        const d = grid[i];
+        if (d < 0.5 || d > maxUseful) continue;
+        if (shoreDist[i] * mpc < shoreBufferM) continue; // off the bank
+        const edge = Math.min(1, slope[i] / p95);
+        const depthFit = Math.exp(-((d - tmid) ** 2) / (2 * twid * twid));
+        const cover = hasShallowNear(x, y) ? 1 : 0;
+        const st = nearStruct(x, y);
+        const structBonus = st ? (st.type === 'dropoff' ? 1 : st.type === 'hole' ? 0.8 : 0.55) : 0;
+        let wind = 0;
+        if (wdx || wdy) {
+          const vx = x - cx, vy = y - cy, vl = Math.hypot(vx, vy) || 1;
+          wind = Math.max(0, (vx / vl) * wdx + (vy / vl) * wdy);
+        }
+        const score = 0.34 * edge + 0.3 * depthFit + 0.16 * cover + 0.14 * structBonus + 0.06 * wind;
+        out.push({ x, y, d, score, edge, st });
       }
-      const score =
-        0.36 * edge + 0.28 * depthFit + 0.18 * cover + 0.12 * structBonus + 0.06 * wind;
-      cands.push({ x, y, d, score, edge, st });
-    }
+    out.sort((a, b) => b.score - a.score);
+    return out;
+  };
 
-  cands.sort((a, b) => b.score - a.score);
+  const primaryBand = bands.target;
+  const secondaryBand = bands.favorShallow ? bands.hold : bands.feed;
+  const primary = scoreBand(primaryBand);
+  const secondary = scoreBand(secondaryBand);
+
   const minSep = Math.max(6, Math.round(320 / mpc));
+  const clash = (p, arr) => arr.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < minSep);
   const picked = [];
-  for (const cnd of cands) {
-    if (picked.some((p) => Math.hypot(p.x - cnd.x, p.y - cnd.y) < minSep)) continue;
-    picked.push(cnd);
-    if (picked.length >= maxN) break;
-  }
+  const takeFrom = (arr, limit, role) => {
+    let taken = 0;
+    for (const cnd of arr) {
+      if (taken >= limit) break;
+      if (clash(cnd, picked)) continue;
+      picked.push({ ...cnd, role });
+      taken++;
+    }
+  };
+  // most from the band conditions favour, but guarantee a couple of the "other" band
+  takeFrom(primary, maxN - 2, bands.favorShallow ? 'feed' : 'hold');
+  takeFrom(secondary, 2, bands.favorShallow ? 'hold' : 'feed');
+  takeFrom(primary, maxN - picked.length, bands.favorShallow ? 'feed' : 'hold'); // fill
 
-  return picked.map((p, idx) => {
-    const where = quadrantWord(p.x - cx, cy - p.y); // dy: north positive
-    const edgeWord = p.edge > 0.6 ? 'Sharp weed edge / drop-off' : p.edge > 0.3 ? 'Weed-line break' : favorShallow ? 'Shallow feeding flat' : 'Deeper ambush hold';
-    const roleText = favorShallow
-      ? 'pike push up onto this edge to ambush bait in low light'
-      : 'pike hold tight to this edge by the deeper, cooler water';
+  picked.sort((a, b) => b.score - a.score);
+
+  return picked.slice(0, maxN).map((p, idx) => {
+    const where = quadrantWord(p.x - cx, cy - p.y);
+    const shallow = p.role === 'feed';
+    const edgeWord = p.edge > 0.55 ? 'Sharp weed edge / drop-off' : p.edge > 0.28 ? 'Weed-line break' : shallow ? 'Shallow feeding flat' : 'Deeper ambush hold';
+    const roleText = shallow
+      ? 'pike push onto this edge to ambush bait in low light'
+      : 'a deeper holding lie — bigger pike sit here by day and in bright heat';
     const timeText =
       c.phase === 'dawn' || c.phase === 'dusk'
         ? 'Prime right now — work it thoroughly.'
         : c.phase === 'day'
-          ? 'Fish the shady/deeper side through midday.'
-          : 'Low-light/after-dark ambush lane.';
-    const structText = p.st ? ` Sits on a detected ${p.st.type === 'dropoff' ? 'drop-off' : p.st.type === 'hole' ? 'deep hole' : p.st.type}.` : '';
+          ? 'Fish the shaded/deeper side through midday.'
+          : 'Low-light / after-dark ambush lane.';
+    const structText = p.st ? ` On a detected ${p.st.type === 'dropoff' ? 'drop-off' : p.st.type === 'hole' ? 'deep hole' : p.st.type === 'hump' ? 'hump' : 'flat'}.` : '';
     const baitId = pickBait(p.d, c);
     return {
       id: `pike-${p.x}-${p.y}`,
@@ -233,6 +258,7 @@ export function computePikeHotspots(lake, structures, c, maxN = 6) {
       y: p.y,
       depth: p.d,
       score: p.score,
+      role: p.role,
       where: whereWord(where),
       reason: `${edgeWord} in the ${whereWord(where)} at ~${p.d.toFixed(1)} m — ${roleText}.${structText} ${timeText}`,
       baitId,

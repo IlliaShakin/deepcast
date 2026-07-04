@@ -237,6 +237,7 @@ function buildLake(rec) {
     n: N,
     grid,
     maxDepth: maxD,
+    shoreDist: distIn, // cells to nearest shore (0 on land) — used by the pike model
     geo: { minLon, maxLat, kx, ky, cell, ox, oy },
   };
 }

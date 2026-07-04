@@ -147,6 +147,11 @@ console.log('\nPike predictor (Babīte)');
     for (let j = i + 1; j < dawnSpots.length; j++)
       minPairM = Math.min(minPairM, Math.hypot(dawnSpots[i].x - dawnSpots[j].x, dawnSpots[i].y - dawnSpots[j].y) * mpc);
   check(minPairM > 150, `hotspots are spatially separated (min ${Math.round(minPairM)} m apart)`);
+  // not glued to the shoreline: all spots sit off the bank, and some are well out
+  const shoreM = dawnSpots.map((s) => lake.shoreDist[Math.round(s.y) * lake.n + Math.round(s.x)] * mpc);
+  check(Math.min(...shoreM) >= 40, `every hotspot is off the bank (nearest ${Math.round(Math.min(...shoreM))} m from shore)`);
+  check(Math.max(...shoreM) > 250, `at least one hotspot is well out in the water (${Math.round(Math.max(...shoreM))} m from shore)`);
+  check(new Set(dawnSpots.map((s) => s.role)).size >= 2, 'hotspots mix feeding edges and deeper holding lies');
   // determinism
   const again = computePikeHotspots(lake, structures, cDawn, 6);
   check(again.every((s, i) => s.id === dawnSpots[i].id), 'hotspot output is deterministic');
